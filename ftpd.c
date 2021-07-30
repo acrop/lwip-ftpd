@@ -1263,12 +1263,13 @@ static err_t ftpd_msgrecv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t 
 			while (((*pt == '\r') || (*pt == '\n')) && pt >= text)
 				*pt-- = '\0';
 
-			LWIP_DEBUGF(FTPD_DEBUG, ("query: %s\n", text));
-
-			strncpy(cmd, text, 4);
-			for (pt = cmd; isalpha(*pt) && pt < &cmd[4]; pt++)
-				*pt = toupper(*pt);
+			memset(cmd, 0, sizeof(cmd));
+			strncpy(cmd, text, sizeof(cmd) - 1);
+			for (pt = cmd; lwip_isalpha((unsigned char)(*pt)) && pt < &cmd[4]; pt++) {
+				*pt = lwip_toupper((unsigned char)(*pt));
+			}
 			*pt = '\0';
+			LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: query %s, cmd:%s\n", text, cmd));
 
 			for (ftpd_cmd = ftpd_commands; ftpd_cmd->cmd != NULL; ftpd_cmd++) {
 				if (!strcmp(ftpd_cmd->cmd, cmd))
