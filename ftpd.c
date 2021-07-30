@@ -296,7 +296,7 @@ static int sfifo_write(sfifo_t *f, const void *_buf, int len)
 
 	/* total = len = min(space, len) */
 	total = sfifo_space(f);
-	LWIP_DEBUGF(FTPD_DEBUG, ("sfifo_space() = %d\n",total));
+	LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: sfifo_space() = %d\n",total));
 	if(len > total)
 		len = total;
 	else
@@ -345,7 +345,7 @@ static void ftpd_dataerr(void *arg, err_t err)
 {
 	struct ftpd_datastate *fsd = arg;
 
-	LWIP_DEBUGF(FTPD_DEBUG, ("ftpd_dataerr: %s (%i)\n", lwip_strerr(err), err));
+	LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: ftpd_dataerr %s (%i)\n", lwip_strerr(err), err));
 	if (fsd == NULL)
 		return;
 	fsd->msgfs->datafs = NULL;
@@ -393,7 +393,7 @@ static void send_data(struct tcp_pcb *pcb, struct ftpd_datastate *fsd)
 		if ((i + len) > fsd->fifo.size) {
 			err = tcp_write(pcb, fsd->fifo.buffer + i, (u16_t)(fsd->fifo.size - i), 1);
 			if (err != ERR_OK) {
-				LWIP_DEBUGF(FTPD_DEBUG, ("send_data: error writing!\n"));
+				LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: send_data error writing!\n"));
 				return;
 			}
 			len -= fsd->fifo.size - i;
@@ -403,7 +403,7 @@ static void send_data(struct tcp_pcb *pcb, struct ftpd_datastate *fsd)
 
 		err = tcp_write(pcb, fsd->fifo.buffer + i, len, 1);
 		if (err != ERR_OK) {
-			LWIP_DEBUGF(FTPD_DEBUG, ("send_data: error writing!\n"));
+			LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: send_data error writing!\n"));
 			return;
 		}
 		fsd->fifo.readpos += len;
@@ -486,10 +486,16 @@ static void send_next_directory(struct ftpd_datastate *fsd, struct tcp_pcb *pcb,
 
 			vfs_stat(fsd->msgfs->vfs, fsd->vfs_dirent->name, &st);
 			s_time = gmtime(&st.st_mtime);
-			if (s_time->tm_year == current_year)
-				len = sprintf(buffer, "-rw-rw-rw-   1 user     ftp  %11ld %s %02i %02i:%02i %s\r\n", st.st_size, month_table[s_time->tm_mon], s_time->tm_mday, s_time->tm_hour, s_time->tm_min, fsd->vfs_dirent->name);
-			else
-				len = sprintf(buffer, "-rw-rw-rw-   1 user     ftp  %11ld %s %02i %5i %s\r\n", st.st_size, month_table[s_time->tm_mon], s_time->tm_mday, s_time->tm_year + 1900, fsd->vfs_dirent->name);
+			if (s_time->tm_year == current_year) {
+				len = sprintf(buffer, "-rw-rw-rw-   1 user     ftp  %11lld %s %02i %02i:%02i %s\r\n",
+					(long long)st.st_size, month_table[s_time->tm_mon], s_time->tm_mday,
+					s_time->tm_hour, s_time->tm_min,
+					fsd->vfs_dirent->d_name);
+			} else {
+				len = sprintf(buffer, "-rw-rw-rw-   1 user     ftp  %11lld %s %02i %5i %s\r\n",
+					(long long)st.st_size, month_table[s_time->tm_mon], s_time->tm_mday,
+					s_time->tm_year + 1900, fsd->vfs_dirent->d_name);
+			}
 			if (VFS_ISDIR(st.st_mode))
 				buffer[0] = 'd';
 			if (sfifo_space(&fsd->fifo) < len) {
@@ -662,7 +668,7 @@ static int open_dataconnection(struct tcp_pcb *pcb, struct ftpd_msgstate *fsm)
 	fsm->datafs = malloc(sizeof(struct ftpd_datastate));
 
 	if (fsm->datafs == NULL) {
-		LWIP_DEBUGF(FTPD_DEBUG, ("open_dataconnection: Out of memory\n"));
+		LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: open_dataconnection out of memory\n"));
 		send_msg(pcb, fsm, msg451);
 		return 1;
 	}
@@ -877,7 +883,7 @@ static void cmd_pasv(const char *arg, struct tcp_pcb *pcb, struct ftpd_msgstate 
 	fsm->datafs = malloc(sizeof(struct ftpd_datastate));
 
 	if (fsm->datafs == NULL) {
-		LWIP_DEBUGF(FTPD_DEBUG, ("cmd_pasv: Out of memory\n"));
+		LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: cmd_pasv out of memory\n"));
 		send_msg(pcb, fsm, msg451);
 		return;
 	}
@@ -924,7 +930,7 @@ static void cmd_pasv(const char *arg, struct tcp_pcb *pcb, struct ftpd_msgstate 
 
 	temppcb = tcp_listen(fsm->datalistenpcb);
 	if (!temppcb) {
-		LWIP_DEBUGF(FTPD_DEBUG, ("cmd_pasv: tcp_listen failed\n"));
+		LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: cmd_pasv tcp_listen failed\n"));
 		ftpd_dataclose(fsm->datalistenpcb, fsm->datafs);
 		fsm->datalistenpcb = NULL;
 		fsm->datafs = NULL;
@@ -960,7 +966,7 @@ static void cmd_abrt(const char *arg, struct tcp_pcb *pcb, struct ftpd_msgstate 
 
 static void cmd_type(const char *arg, struct tcp_pcb *pcb, struct ftpd_msgstate *fsm)
 {
-	LWIP_DEBUGF(FTPD_DEBUG, ("Got TYPE -%s-\n", arg));
+	LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: Got TYPE -%s-\n", arg));
 
 	if(strcmp(arg, "I") != 0) {
 		send_msg(pcb, fsm, msg502);
@@ -972,7 +978,7 @@ static void cmd_type(const char *arg, struct tcp_pcb *pcb, struct ftpd_msgstate 
 
 static void cmd_mode(const char *arg, struct tcp_pcb *pcb, struct ftpd_msgstate *fsm)
 {
-	LWIP_DEBUGF(FTPD_DEBUG, ("Got MODE -%s-\n", arg));
+	LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: Got MODE -%s-\n", arg));
 	send_msg(pcb, fsm, msg502);
 }
 
@@ -990,7 +996,7 @@ static void cmd_rnfr(const char *arg, struct tcp_pcb *pcb, struct ftpd_msgstate 
 		free(fsm->renamefrom);
 	fsm->renamefrom = malloc(strlen(arg) + 1);
 	if (fsm->renamefrom == NULL) {
-		LWIP_DEBUGF(FTPD_DEBUG, ("cmd_rnfr: Out of memory\n"));
+		LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: cmd_rnfr out of memory\n"));
 		send_msg(pcb, fsm, msg451);
 		return;
 	}
@@ -1146,7 +1152,7 @@ static void send_msgdata(struct tcp_pcb *pcb, struct ftpd_msgstate *fsm)
 		if ((i + len) > fsm->fifo.size) {
 			err = tcp_write(pcb, fsm->fifo.buffer + i, (u16_t)(fsm->fifo.size - i), 1);
 			if (err != ERR_OK) {
-				LWIP_DEBUGF(FTPD_DEBUG, ("send_msgdata: error writing!\n"));
+				LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: send_msgdata error writing!\n"));
 				return;
 			}
 			len -= fsm->fifo.size - i;
@@ -1156,7 +1162,7 @@ static void send_msgdata(struct tcp_pcb *pcb, struct ftpd_msgstate *fsm)
 
 		err = tcp_write(pcb, fsm->fifo.buffer + i, len, 1);
 		if (err != ERR_OK) {
-			LWIP_DEBUGF(FTPD_DEBUG, ("send_msgdata: error writing!\n"));
+			LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: send_msgdata error writing!\n"));
 			return;
 		}
 		fsm->fifo.readpos += len;
@@ -1177,7 +1183,7 @@ static void send_msg(struct tcp_pcb *pcb, struct ftpd_msgstate *fsm, char *msg, 
 	if (sfifo_space(&fsm->fifo) < len)
 		return;
 	sfifo_write(&fsm->fifo, buffer, len);
-	LWIP_DEBUGF(FTPD_DEBUG, ("response: %s", buffer));
+	LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: response %s", buffer));
 	send_msgdata(pcb, fsm);
 }
 
@@ -1185,7 +1191,7 @@ static void ftpd_msgerr(void *arg, err_t err)
 {
 	struct ftpd_msgstate *fsm = arg;
 
-	LWIP_DEBUGF(FTPD_DEBUG, ("ftpd_msgerr: %s (%i)\n", lwip_strerr(err), err));
+	LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: ftpd_msgerr %s (%i)\n", lwip_strerr(err), err));
 	if (fsm == NULL)
 		return;
 	if (fsm->datafs)
@@ -1319,15 +1325,15 @@ static err_t ftpd_msgpoll(void *arg, struct tcp_pcb *pcb)
 
 static err_t ftpd_msgaccept(void *arg, struct tcp_pcb *pcb, err_t err)
 {
-	LWIP_PLATFORM_DIAG(("ftpd_msgaccept called"));
 	struct ftpd_msgstate *fsm;
+	LWIP_PLATFORM_DIAG(("ftpd: ftpd_msgaccept called"));
 
 	/* Allocate memory for the structure that holds the state of the
 	   connection. */
 	fsm = malloc(sizeof(struct ftpd_msgstate));
 
 	if (fsm == NULL) {
-		LWIP_DEBUGF(FTPD_DEBUG, ("ftpd_msgaccept: Out of memory\n"));
+		LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: ftpd_msgaccept out of memory\n"));
 		return ERR_MEM;
 	}
 	memset(fsm, 0, sizeof(struct ftpd_msgstate));
@@ -1373,10 +1379,10 @@ void ftpd_init(void)
 	vfs_load_plugin(vfs_default_fs);
 
 	pcb = tcp_new();
-	LWIP_DEBUGF(FTPD_DEBUG, ("ftpd_init: pcb: %x\n", pcb));
+	LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: ftpd_init pcb: %x\n", pcb));
 	int r = tcp_bind(pcb, IP_ADDR_ANY, 21);
-	LWIP_DEBUGF(FTPD_DEBUG, ("ftpd_init: tcp_bind: %d\n", r));
+	LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: ftpd_init tcp_bind: %d\n", r));
 	pcb = tcp_listen(pcb);
-	LWIP_DEBUGF(FTPD_DEBUG, ("ftpd_init: listen-pcb: %x\n", pcb));
+	LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: ftpd_init listen-pcb: %x\n", pcb));
 	tcp_accept(pcb, ftpd_msgaccept);
 }
