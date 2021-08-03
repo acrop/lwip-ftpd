@@ -872,6 +872,11 @@ static void cmd_syst(const char *arg, struct tcp_pcb *pcb, struct ftpd_msgstate 
 	send_msg(pcb, fsm, msg214SYST, "UNIX");
 }
 
+static void cmd_opts(const char *arg, struct tcp_pcb *pcb, struct ftpd_msgstate *fsm)
+{
+	send_msg(pcb, fsm, msg200);
+}
+
 static void cmd_pasv(const char *arg, struct tcp_pcb *pcb, struct ftpd_msgstate *fsm)
 {
 	static u16_t port = 4096;
@@ -1129,6 +1134,7 @@ static struct ftpd_command ftpd_commands[] = {
 	{"XRMD", cmd_rmd},
 	{"DELE", cmd_dele},
 	{"PASV", cmd_pasv},
+	{"OPTS", cmd_opts},
 	{NULL, NULL}
 };
 
