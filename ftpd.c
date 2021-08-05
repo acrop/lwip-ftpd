@@ -327,6 +327,7 @@ struct ftpd_datastate {
 };
 
 struct ftpd_msgstate {
+	char buffer[2048];
 	enum ftpd_state_e state;
 	sfifo_t fifo;
 	vfs_t *vfs;
@@ -416,7 +417,6 @@ static void send_file(struct ftpd_datastate *fsd, struct tcp_pcb *pcb)
 		return;
 
 	if (fsd->vfs_file) {
-		char buffer[2048];
 		int len;
 
 		len = sfifo_space(&fsd->fifo);
@@ -426,7 +426,7 @@ static void send_file(struct ftpd_datastate *fsd, struct tcp_pcb *pcb)
 		}
 		if (len > 2048)
 			len = 2048;
-		len = vfs_read(buffer, 1, len, fsd->vfs_file);
+		len = vfs_read(fsd->msgfs->buffer, 1, len, fsd->vfs_file);
 		if (len == 0) {
 			if (vfs_eof(fsd->vfs_file) == 0)
 				return;
@@ -434,7 +434,7 @@ static void send_file(struct ftpd_datastate *fsd, struct tcp_pcb *pcb)
 			fsd->vfs_file = NULL;
 			return;
 		}
-		sfifo_write(&fsd->fifo, buffer, len);
+		sfifo_write(&fsd->fifo, fsd->msgfs->buffer, len);
 		send_data(pcb, fsd);
 	} else {
 		struct ftpd_msgstate *fsm;
@@ -458,7 +458,6 @@ static void send_file(struct ftpd_datastate *fsd, struct tcp_pcb *pcb)
 
 static void send_next_directory(struct ftpd_datastate *fsd, struct tcp_pcb *pcb, int shortlist)
 {
-	char buffer[1024];
 	int len;
 
 	while (1) {
@@ -467,12 +466,12 @@ static void send_next_directory(struct ftpd_datastate *fsd, struct tcp_pcb *pcb,
 
 	if (fsd->vfs_dirent) {
 		if (shortlist) {
-			len = sprintf(buffer, "%s\r\n", fsd->vfs_dirent->name);
+			len = sprintf(fsd->msgfs->buffer, "%s\r\n", fsd->vfs_dirent->name);
 			if (sfifo_space(&fsd->fifo) < len) {
 				send_data(pcb, fsd);
 				return;
 			}
-			sfifo_write(&fsd->fifo, buffer, len);
+			sfifo_write(&fsd->fifo, fsd->msgfs->buffer, len);
 			fsd->vfs_dirent = NULL;
 		} else {
 			vfs_stat_t st;
@@ -487,22 +486,22 @@ static void send_next_directory(struct ftpd_datastate *fsd, struct tcp_pcb *pcb,
 			vfs_stat(fsd->msgfs->vfs, fsd->vfs_dirent->name, &st);
 			s_time = gmtime(&st.st_mtime);
 			if (s_time->tm_year == current_year) {
-				len = sprintf(buffer, "-rw-rw-rw-   1 user     ftp  %11lld %s %02i %02i:%02i %s\r\n",
+				len = sprintf(fsd->msgfs->buffer, "-rw-rw-rw-   1 user     ftp  %11lld %s %02i %02i:%02i %s\r\n",
 					(long long)st.st_size, month_table[s_time->tm_mon], s_time->tm_mday,
 					s_time->tm_hour, s_time->tm_min,
 					fsd->vfs_dirent->d_name);
 			} else {
-				len = sprintf(buffer, "-rw-rw-rw-   1 user     ftp  %11lld %s %02i %5i %s\r\n",
+				len = sprintf(fsd->msgfs->buffer, "-rw-rw-rw-   1 user     ftp  %11lld %s %02i %5i %s\r\n",
 					(long long)st.st_size, month_table[s_time->tm_mon], s_time->tm_mday,
 					s_time->tm_year + 1900, fsd->vfs_dirent->d_name);
 			}
 			if (VFS_ISDIR(st.st_mode))
-				buffer[0] = 'd';
+				fsd->msgfs->buffer[0] = 'd';
 			if (sfifo_space(&fsd->fifo) < len) {
 				send_data(pcb, fsd);
 				return;
 			}
-			sfifo_write(&fsd->fifo, buffer, len);
+			sfifo_write(&fsd->fifo, fsd->msgfs->buffer, len);
 			fsd->vfs_dirent = NULL;
 		}
 	} else {
@@ -1178,18 +1177,17 @@ static void send_msgdata(struct tcp_pcb *pcb, struct ftpd_msgstate *fsm)
 static void send_msg(struct tcp_pcb *pcb, struct ftpd_msgstate *fsm, char *msg, ...)
 {
 	va_list arg;
-	char buffer[1024];
 	int len;
 
 	va_start(arg, msg);
-	vsprintf(buffer, msg, arg);
+	vsprintf(fsm->buffer, msg, arg);
 	va_end(arg);
-	strcat(buffer, "\r\n");
-	len = strlen(buffer);
+	strcat(fsm->buffer, "\r\n");
+	len = strlen(fsm->buffer);
 	if (sfifo_space(&fsm->fifo) < len)
 		return;
-	sfifo_write(&fsm->fifo, buffer, len);
-	LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: response %s", buffer));
+	sfifo_write(&fsm->fifo, fsm->buffer, len);
+	LWIP_DEBUGF(FTPD_DEBUG, ("ftpd: response %s", fsm->buffer));
 	send_msgdata(pcb, fsm);
 }
 
